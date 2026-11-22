@@ -165,3 +165,4 @@ export const ManageBookingModal = ({ isOpen, onClose }) => {
 };
 
 export default ManageBookingModal;
+

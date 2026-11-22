@@ -151,3 +151,4 @@ export const Footer = ({ onOpenFaq, onOpenPolicy }) => {
 };
 
 export default Footer;
+

@@ -278,3 +278,4 @@ export const FAQ_ITEMS = [
     answer: 'Yes! Our interactive 2D bus layout visualizer supports both single-deck seater buses and dual-deck (Lower & Upper) sleeper configurations with dedicated window, aisle, and berth tags.',
   },
 ];
+
