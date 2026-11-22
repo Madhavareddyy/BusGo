@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS public.buses (
   operator_id UUID NOT NULL REFERENCES public.operators(id) ON DELETE CASCADE,
   registration_number TEXT NOT NULL UNIQUE,
   name TEXT NOT NULL,
-  bus_type TEXT NOT NULL, -- 'AC Sleeper (2+1)', 'AC Seater (2+2)', 'Non-AC Sleeper', 'Volvo Multi-Axle'
+  bus_type TEXT NOT NULL,
   has_ac BOOLEAN DEFAULT TRUE,
   has_wifi BOOLEAN DEFAULT FALSE,
   total_seats INTEGER NOT NULL CHECK (total_seats > 0),
@@ -66,7 +66,7 @@ CREATE TABLE IF NOT EXISTS public.buses (
 CREATE TABLE IF NOT EXISTS public.bus_seats (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   bus_id UUID NOT NULL REFERENCES public.buses(id) ON DELETE CASCADE,
-  seat_number TEXT NOT NULL, -- e.g. 'L1', 'L2', 'U1', 'U2'
+  seat_number TEXT NOT NULL,
   deck TEXT NOT NULL DEFAULT 'lower' CHECK (deck IN ('lower', 'upper')),
   row_num INTEGER NOT NULL,
   col_num INTEGER NOT NULL,
@@ -93,9 +93,9 @@ CREATE TABLE IF NOT EXISTS public.route_stops (
   route_id UUID NOT NULL REFERENCES public.routes(id) ON DELETE CASCADE,
   city_id UUID NOT NULL REFERENCES public.cities(id) ON DELETE CASCADE,
   stop_type TEXT NOT NULL CHECK (stop_type IN ('boarding', 'dropping')),
-  name TEXT NOT NULL, -- e.g. 'Majestic (KBS) Platform 4'
+  name TEXT NOT NULL,
   landmark TEXT,
-  time_offset_minutes INTEGER NOT NULL DEFAULT 0, -- offset from scheduled departure
+  time_offset_minutes INTEGER NOT NULL DEFAULT 0,
   display_order INTEGER NOT NULL DEFAULT 1,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -243,9 +243,7 @@ CREATE TABLE IF NOT EXISTS public.notifications (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- ====================================================================
 -- PERFORMANCE INDEXES
--- ====================================================================
 CREATE INDEX IF NOT EXISTS idx_trips_route_date ON public.trips(route_id, journey_date);
 CREATE INDEX IF NOT EXISTS idx_trip_seats_trip_status ON public.trip_seats(trip_id, status);
 CREATE INDEX IF NOT EXISTS idx_trip_seats_lock_expires ON public.trip_seats(lock_expires_at);
@@ -253,9 +251,7 @@ CREATE INDEX IF NOT EXISTS idx_bookings_pnr ON public.bookings(pnr);
 CREATE INDEX IF NOT EXISTS idx_bookings_user ON public.bookings(user_id);
 CREATE INDEX IF NOT EXISTS idx_route_stops_route ON public.route_stops(route_id);
 
--- ====================================================================
--- ROW LEVEL SECURITY (RLS) POLICIES
--- ====================================================================
+-- ENABLE ROW LEVEL SECURITY
 ALTER TABLE public.operators ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.cities ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.buses ENABLE ROW LEVEL SECURITY;
@@ -273,32 +269,72 @@ ALTER TABLE public.reviews ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.coupons ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 
--- Public Read-Only catalog tables (Everyone can browse buses, cities, routes, trips, seats, reviews, coupons)
+-- IDEMPOTENT RLS POLICIES
+DROP POLICY IF EXISTS "Public can view active operators" ON public.operators;
 CREATE POLICY "Public can view active operators" ON public.operators FOR SELECT USING (is_active = TRUE);
+
+DROP POLICY IF EXISTS "Public can view cities" ON public.cities;
 CREATE POLICY "Public can view cities" ON public.cities FOR SELECT USING (TRUE);
+
+DROP POLICY IF EXISTS "Public can view buses" ON public.buses;
 CREATE POLICY "Public can view buses" ON public.buses FOR SELECT USING (TRUE);
+
+DROP POLICY IF EXISTS "Public can view bus seats" ON public.bus_seats;
 CREATE POLICY "Public can view bus seats" ON public.bus_seats FOR SELECT USING (TRUE);
+
+DROP POLICY IF EXISTS "Public can view routes" ON public.routes;
 CREATE POLICY "Public can view routes" ON public.routes FOR SELECT USING (TRUE);
+
+DROP POLICY IF EXISTS "Public can view route stops" ON public.route_stops;
 CREATE POLICY "Public can view route stops" ON public.route_stops FOR SELECT USING (TRUE);
+
+DROP POLICY IF EXISTS "Public can view trips" ON public.trips;
 CREATE POLICY "Public can view trips" ON public.trips FOR SELECT USING (status != 'cancelled');
+
+DROP POLICY IF EXISTS "Public can view trip seats" ON public.trip_seats;
 CREATE POLICY "Public can view trip seats" ON public.trip_seats FOR SELECT USING (TRUE);
+
+DROP POLICY IF EXISTS "Public can view active coupons" ON public.coupons;
 CREATE POLICY "Public can view active coupons" ON public.coupons FOR SELECT USING (is_active = TRUE);
+
+DROP POLICY IF EXISTS "Public can view reviews" ON public.reviews;
 CREATE POLICY "Public can view reviews" ON public.reviews FOR SELECT USING (TRUE);
 
--- Bookings & Private Data
+DROP POLICY IF EXISTS "Users can insert own reviews" ON public.reviews;
+CREATE POLICY "Users can insert own reviews" ON public.reviews FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+
+-- Private Data Policies
+DROP POLICY IF EXISTS "Users can view own bookings" ON public.bookings;
 CREATE POLICY "Users can view own bookings" ON public.bookings FOR SELECT TO authenticated USING (auth.uid() = user_id OR public.is_admin());
+
+DROP POLICY IF EXISTS "Users can view own passengers" ON public.passengers;
 CREATE POLICY "Users can view own passengers" ON public.passengers FOR SELECT TO authenticated USING (
   EXISTS (SELECT 1 FROM public.bookings b WHERE b.id = booking_id AND (b.user_id = auth.uid() OR public.is_admin()))
 );
+
+DROP POLICY IF EXISTS "Users can view own payments" ON public.payments;
 CREATE POLICY "Users can view own payments" ON public.payments FOR SELECT TO authenticated USING (
   EXISTS (SELECT 1 FROM public.bookings b WHERE b.id = booking_id AND (b.user_id = auth.uid() OR public.is_admin()))
 );
+
+DROP POLICY IF EXISTS "Users can view own cancellations" ON public.cancellations;
 CREATE POLICY "Users can view own cancellations" ON public.cancellations FOR SELECT TO authenticated USING (
   cancelled_by_user_id = auth.uid() OR public.is_admin()
 );
+
+DROP POLICY IF EXISTS "Users can view own refunds" ON public.refunds;
 CREATE POLICY "Users can view own refunds" ON public.refunds FOR SELECT TO authenticated USING (
   EXISTS (SELECT 1 FROM public.bookings b WHERE b.id = booking_id AND (b.user_id = auth.uid() OR public.is_admin()))
 );
+
+DROP POLICY IF EXISTS "Users can view own notifications" ON public.notifications;
 CREATE POLICY "Users can view own notifications" ON public.notifications FOR SELECT TO authenticated USING (
+  user_id = auth.uid()
+);
+
+DROP POLICY IF EXISTS "Users can update own notifications" ON public.notifications;
+CREATE POLICY "Users can update own notifications" ON public.notifications FOR UPDATE TO authenticated USING (
+  user_id = auth.uid()
+) WITH CHECK (
   user_id = auth.uid()
 );

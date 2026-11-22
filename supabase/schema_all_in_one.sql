@@ -1,5 +1,6 @@
 -- ====================================================================
 -- BUSGO COMPLETE DATABASE MIGRATION SCRIPT (ALL-IN-ONE)
+-- Fully Idempotent, Safe to Re-Run Multiple Times
 -- Run this script in the Supabase SQL Editor:
 -- https://supabase.com/dashboard/project/_/sql
 -- ====================================================================
@@ -56,6 +57,7 @@ AS $$
   );
 $$;
 
+-- Idempotent Profile Policies
 DROP POLICY IF EXISTS "Users can read own profile" ON public.profiles;
 CREATE POLICY "Users can read own profile"
   ON public.profiles FOR SELECT TO authenticated
@@ -76,6 +78,12 @@ CREATE POLICY "Users can update own details"
     AND status = (SELECT p.status FROM public.profiles p WHERE p.id = auth.uid())
   );
 
+DROP POLICY IF EXISTS "Admins can update any profile" ON public.profiles;
+CREATE POLICY "Admins can update any profile"
+  ON public.profiles FOR UPDATE TO authenticated
+  USING (public.is_admin())
+  WITH CHECK (public.is_admin());
+
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -91,6 +99,7 @@ DECLARE
   v_city TEXT;
 BEGIN
   v_role := COALESCE(new.raw_user_meta_data->>'role', 'customer');
+  -- Security Rule: Admin role can never be acquired via public signup
   IF v_role = 'admin' THEN
     v_role := 'customer';
   END IF;
@@ -374,33 +383,78 @@ ALTER TABLE public.reviews ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.coupons ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 
--- Catalog Policies (Public read)
+-- ====================================================================
+-- IDEMPOTENT ROW LEVEL SECURITY (RLS) POLICIES
+-- Preceded by DROP POLICY IF EXISTS to allow safe repeated executions
+-- ====================================================================
+
+-- Catalog Policies (Public Read Access)
+DROP POLICY IF EXISTS "Public can view active operators" ON public.operators;
 CREATE POLICY "Public can view active operators" ON public.operators FOR SELECT USING (is_active = TRUE);
+
+DROP POLICY IF EXISTS "Public can view cities" ON public.cities;
 CREATE POLICY "Public can view cities" ON public.cities FOR SELECT USING (TRUE);
+
+DROP POLICY IF EXISTS "Public can view buses" ON public.buses;
 CREATE POLICY "Public can view buses" ON public.buses FOR SELECT USING (TRUE);
+
+DROP POLICY IF EXISTS "Public can view bus seats" ON public.bus_seats;
 CREATE POLICY "Public can view bus seats" ON public.bus_seats FOR SELECT USING (TRUE);
+
+DROP POLICY IF EXISTS "Public can view routes" ON public.routes;
 CREATE POLICY "Public can view routes" ON public.routes FOR SELECT USING (TRUE);
+
+DROP POLICY IF EXISTS "Public can view route stops" ON public.route_stops;
 CREATE POLICY "Public can view route stops" ON public.route_stops FOR SELECT USING (TRUE);
+
+DROP POLICY IF EXISTS "Public can view trips" ON public.trips;
 CREATE POLICY "Public can view trips" ON public.trips FOR SELECT USING (status != 'cancelled');
+
+DROP POLICY IF EXISTS "Public can view trip seats" ON public.trip_seats;
 CREATE POLICY "Public can view trip seats" ON public.trip_seats FOR SELECT USING (TRUE);
+
+DROP POLICY IF EXISTS "Public can view active coupons" ON public.coupons;
 CREATE POLICY "Public can view active coupons" ON public.coupons FOR SELECT USING (is_active = TRUE);
+
+DROP POLICY IF EXISTS "Public can view reviews" ON public.reviews;
 CREATE POLICY "Public can view reviews" ON public.reviews FOR SELECT USING (TRUE);
 
--- Private Data Policies
+DROP POLICY IF EXISTS "Users can insert own reviews" ON public.reviews;
+CREATE POLICY "Users can insert own reviews" ON public.reviews FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+
+-- Private Data Policies (Strict User Isolation)
+DROP POLICY IF EXISTS "Users can view own bookings" ON public.bookings;
 CREATE POLICY "Users can view own bookings" ON public.bookings FOR SELECT TO authenticated USING (auth.uid() = user_id OR public.is_admin());
+
+DROP POLICY IF EXISTS "Users can view own passengers" ON public.passengers;
 CREATE POLICY "Users can view own passengers" ON public.passengers FOR SELECT TO authenticated USING (
   EXISTS (SELECT 1 FROM public.bookings b WHERE b.id = booking_id AND (b.user_id = auth.uid() OR public.is_admin()))
 );
+
+DROP POLICY IF EXISTS "Users can view own payments" ON public.payments;
 CREATE POLICY "Users can view own payments" ON public.payments FOR SELECT TO authenticated USING (
   EXISTS (SELECT 1 FROM public.bookings b WHERE b.id = booking_id AND (b.user_id = auth.uid() OR public.is_admin()))
 );
+
+DROP POLICY IF EXISTS "Users can view own cancellations" ON public.cancellations;
 CREATE POLICY "Users can view own cancellations" ON public.cancellations FOR SELECT TO authenticated USING (
   cancelled_by_user_id = auth.uid() OR public.is_admin()
 );
+
+DROP POLICY IF EXISTS "Users can view own refunds" ON public.refunds;
 CREATE POLICY "Users can view own refunds" ON public.refunds FOR SELECT TO authenticated USING (
   EXISTS (SELECT 1 FROM public.bookings b WHERE b.id = booking_id AND (b.user_id = auth.uid() OR public.is_admin()))
 );
+
+DROP POLICY IF EXISTS "Users can view own notifications" ON public.notifications;
 CREATE POLICY "Users can view own notifications" ON public.notifications FOR SELECT TO authenticated USING (
+  user_id = auth.uid()
+);
+
+DROP POLICY IF EXISTS "Users can update own notifications" ON public.notifications;
+CREATE POLICY "Users can update own notifications" ON public.notifications FOR UPDATE TO authenticated USING (
+  user_id = auth.uid()
+) WITH CHECK (
   user_id = auth.uid()
 );
 

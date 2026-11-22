@@ -1,22 +1,34 @@
-import React, { useState } from 'react';
+import React, { useState, Suspense, lazy } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { Navbar } from './components/layout/Navbar';
 import { Footer } from './components/layout/Footer';
 import { HomePage } from './pages/HomePage';
-import { SearchResultsPlaceholder } from './pages/SearchResultsPlaceholder';
+import { SearchResultsPage } from './pages/SearchResultsPage';
 import { LoginPage } from './pages/auth/LoginPage';
 import { RegisterPage } from './pages/auth/RegisterPage';
-import { OperatorLoginPage } from './pages/auth/OperatorLoginPage';
-import { OperatorRegisterPage } from './pages/auth/OperatorRegisterPage';
-import { AdminLoginPage } from './pages/auth/AdminLoginPage';
-import { ProfilePage } from './pages/customer/ProfilePage';
-import { OperatorDashboardPreview } from './pages/operator/OperatorDashboardPreview';
-import { AdminDashboardPreview } from './pages/admin/AdminDashboardPreview';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { ManageBookingModal } from './components/booking/ManageBookingModal';
 import { HelpModal } from './components/common/HelpModal';
 import { PolicyModal } from './components/common/PolicyModal';
+
+// Code-split heavy routes with lazy loading for optimal bundle size
+const OperatorLoginPage = lazy(() => import('./pages/auth/OperatorLoginPage'));
+const OperatorRegisterPage = lazy(() => import('./pages/auth/OperatorRegisterPage'));
+const AdminLoginPage = lazy(() => import('./pages/auth/AdminLoginPage'));
+const ProfilePage = lazy(() => import('./pages/customer/ProfilePage'));
+const OperatorDashboardPage = lazy(() => import('./pages/operator/OperatorDashboardPage'));
+const AdminDashboardPage = lazy(() => import('./pages/admin/AdminDashboardPage'));
+const BookingConfirmationPage = lazy(() => import('./pages/booking/BookingConfirmationPage'));
+
+const PageLoadingSpinner = () => (
+  <div className="min-h-[60vh] bg-brand-bg flex items-center justify-center p-6">
+    <div className="text-center space-y-3">
+      <div className="w-10 h-10 rounded-full border-4 border-brand-red border-t-transparent animate-spin mx-auto" />
+      <p className="text-xs font-bold text-brand-muted">Loading page...</p>
+    </div>
+  </div>
+);
 
 export default function App() {
   const [manageBookingOpen, setManageBookingOpen] = useState(false);
@@ -47,46 +59,50 @@ export default function App() {
 
         {/* Application Routing Body */}
         <main className="flex-1">
-          <Routes>
-            {/* Public Routes */}
-            <Route path="/" element={<HomePage />} />
-            <Route path="/search" element={<SearchResultsPlaceholder />} />
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/register" element={<RegisterPage />} />
-            <Route path="/operator/login" element={<OperatorLoginPage />} />
-            <Route path="/operator/register" element={<OperatorRegisterPage />} />
-            <Route path="/admin/login" element={<AdminLoginPage />} />
+          <Suspense fallback={<PageLoadingSpinner />}>
+            <Routes>
+              {/* Public Routes */}
+              <Route path="/" element={<HomePage />} />
+              <Route path="/search" element={<SearchResultsPage />} />
+              <Route path="/booking/confirmation" element={<BookingConfirmationPage />} />
+              <Route path="/bookings" element={<ProfilePage />} />
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/register" element={<RegisterPage />} />
+              <Route path="/operator/login" element={<OperatorLoginPage />} />
+              <Route path="/operator/register" element={<OperatorRegisterPage />} />
+              <Route path="/admin/login" element={<AdminLoginPage />} />
 
-            {/* Protected Customer Routes */}
-            <Route 
-              path="/profile" 
-              element={
-                <ProtectedRoute allowedRoles={['customer', 'operator', 'admin']}>
-                  <ProfilePage />
-                </ProtectedRoute>
-              } 
-            />
+              {/* Protected Customer Routes */}
+              <Route 
+                path="/profile" 
+                element={
+                  <ProtectedRoute allowedRoles={['customer', 'operator', 'admin']}>
+                    <ProfilePage />
+                  </ProtectedRoute>
+                } 
+              />
 
-            {/* Protected Operator Routes */}
-            <Route 
-              path="/operator/dashboard" 
-              element={
-                <ProtectedRoute allowedRoles={['operator']}>
-                  <OperatorDashboardPreview />
-                </ProtectedRoute>
-              } 
-            />
+              {/* Protected Operator Routes */}
+              <Route 
+                path="/operator/dashboard" 
+                element={
+                  <ProtectedRoute allowedRoles={['operator', 'admin']}>
+                    <OperatorDashboardPage />
+                  </ProtectedRoute>
+                } 
+              />
 
-            {/* Protected Admin Routes */}
-            <Route 
-              path="/admin/dashboard" 
-              element={
-                <ProtectedRoute allowedRoles={['admin']}>
-                  <AdminDashboardPreview />
-                </ProtectedRoute>
-              } 
-            />
-          </Routes>
+              {/* Protected Admin Routes */}
+              <Route 
+                path="/admin/dashboard" 
+                element={
+                  <ProtectedRoute allowedRoles={['admin']}>
+                    <AdminDashboardPage />
+                  </ProtectedRoute>
+                } 
+              />
+            </Routes>
+          </Suspense>
         </main>
 
         {/* Global Comprehensive Footer */}
