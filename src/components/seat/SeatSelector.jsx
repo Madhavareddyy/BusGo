@@ -62,13 +62,30 @@ export const SeatSelector = ({
   const gst = subtotal * 0.05;
   const total = subtotal + gst;
 
+  // Compute position (row 1..5, col 1..3) accurately for any seat without row number overlap
+  const getSeatPosition = (seat) => {
+    if (seat.row >= 1 && seat.row <= 5 && seat.col >= 1 && seat.col <= 3) {
+      return { row: seat.row, col: seat.col };
+    }
+    const num = parseInt(String(seat.seat_number || '').replace(/\D/g, ''), 10);
+    if (!isNaN(num) && num > 0) {
+      const computedRow = Math.ceil(num / 3);
+      const computedCol = ((num - 1) % 3) + 1;
+      return {
+        row: computedRow <= 5 ? computedRow : 5,
+        col: computedCol,
+      };
+    }
+    return { row: 1, col: 1 };
+  };
+
   const renderSeat = (seat) => {
     const isSelected = selectedSeatIds.includes(seat.id);
     const isBooked = seat.status === 'booked';
     const isLocked = seat.status === 'locked' && !isSelected;
     const isLadies = Boolean(seat.is_ladies);
 
-    let seatClasses = 'border transition-all duration-150 flex flex-col items-center justify-center cursor-pointer select-none relative ';
+    let seatClasses = 'border transition-all duration-150 flex flex-col items-center justify-center cursor-pointer select-none relative shrink-0 ';
     
     // Size depending on sleeper berth vs regular seat
     if (seat.type === 'sleeper' || bus.bus_type?.toLowerCase().includes('sleeper')) {
@@ -172,7 +189,7 @@ export const SeatSelector = ({
           )}
 
           {/* Seat Layout View */}
-          <div className="relative border-2 border-dashed border-gray-200 rounded-xl p-5 bg-slate-50/60">
+          <div className="relative border-2 border-dashed border-gray-200 rounded-xl p-5 bg-slate-50/60 overflow-x-auto min-w-0">
             {/* Bus Front Indicator with Steering Wheel */}
             <div className="flex justify-between items-center pb-4 mb-4 border-b border-gray-200">
               <span className="text-[11px] font-bold text-brand-muted uppercase tracking-wider flex items-center gap-1.5">
@@ -185,31 +202,35 @@ export const SeatSelector = ({
             </div>
 
             {/* Seats Grid */}
-            <div className="space-y-3">
+            <div className="space-y-3 min-w-[280px]">
               {/* Group by rows */}
               {[1, 2, 3, 4, 5].map((rowNum) => {
                 const currentDeckSeats = activeDeck === 'lower' ? lowerSeats : upperSeats;
-                const rowSeats = currentDeckSeats.filter((s) => s.row === rowNum || s.seat_number.includes(String(rowNum)));
+                const rowSeats = currentDeckSeats.filter((s) => getSeatPosition(s).row === rowNum);
 
                 if (rowSeats.length === 0) return null;
 
-                const leftSeats = rowSeats.filter((s) => s.col === 1);
-                const rightSeats = rowSeats.filter((s) => s.col === 2 || s.col === 3);
+                const leftSeats = rowSeats
+                  .filter((s) => getSeatPosition(s).col === 1)
+                  .sort((a, b) => getSeatPosition(a).col - getSeatPosition(b).col);
+                const rightSeats = rowSeats
+                  .filter((s) => getSeatPosition(s).col >= 2)
+                  .sort((a, b) => getSeatPosition(a).col - getSeatPosition(b).col);
 
                 return (
-                  <div key={rowNum} className="flex items-center justify-between gap-6 py-1">
+                  <div key={rowNum} className="flex items-center justify-between gap-4 sm:gap-6 py-1">
                     {/* Left Single Berth / Seat */}
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 shrink-0">
                       {leftSeats.map(renderSeat)}
                     </div>
 
                     {/* Aisle Walking Space */}
-                    <div className="flex-1 text-center border-t border-dotted border-gray-300 text-[9px] text-gray-400 uppercase tracking-widest font-semibold select-none">
+                    <div className="flex-1 text-center border-t border-dotted border-gray-300 text-[9px] text-gray-400 uppercase tracking-widest font-semibold select-none px-2">
                       Aisle
                     </div>
 
                     {/* Right Double Berth / Seats */}
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 shrink-0">
                       {rightSeats.map(renderSeat)}
                     </div>
                   </div>

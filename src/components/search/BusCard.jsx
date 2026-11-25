@@ -105,6 +105,40 @@ export const BusCard = ({ bus }) => {
     });
   };
 
+  // Real-time synchronization of seat statuses to prevent overlapping on concurrent systems
+  useEffect(() => {
+    if (!isExpanded || bookingStep !== 1) return;
+
+    const syncInterval = setInterval(async () => {
+      try {
+        const liveSeats = await dbService.getTripSeats(bus.id);
+        if (liveSeats && liveSeats.length > 0) {
+          setSeats(liveSeats);
+
+          // Verify if any seat selected in local state was claimed by another system
+          setSelectedSeatIds((prev) => {
+            const conflicting = liveSeats.filter(
+              (s) => prev.includes(s.id) && s.status !== 'available'
+            );
+            if (conflicting.length > 0) {
+              const names = conflicting.map((s) => s.seat_number).join(', ');
+              setLockError(`Seat ${names} was just claimed by another passenger on another device.`);
+              const availableIds = new Set(
+                liveSeats.filter((s) => s.status === 'available').map((s) => s.id)
+              );
+              return prev.filter((id) => availableIds.has(id));
+            }
+            return prev;
+          });
+        }
+      } catch (err) {
+        // silent sync error
+      }
+    }, 5000);
+
+    return () => clearInterval(syncInterval);
+  }, [isExpanded, bookingStep, bus.id]);
+
   // Step 1 -> Step 2: Atomic Seat Locking
   const handleProceedToPassengers = async () => {
     if (selectedSeatIds.length === 0) return;
@@ -122,9 +156,15 @@ export const BusCard = ({ bus }) => {
     } catch (err) {
       console.warn('Seat lock conflict or error:', err);
       setLockError(err.message || 'One or more selected seats were just claimed by another passenger. Please select another seat.');
-      // Refresh seats
+      // Refresh seats and auto-prune any seats that are no longer available
       const refreshed = await dbService.getTripSeats(bus.id);
       setSeats(refreshed || []);
+      if (refreshed) {
+        const availableIds = new Set(
+          refreshed.filter((s) => s.status === 'available').map((s) => s.id)
+        );
+        setSelectedSeatIds((prev) => prev.filter((id) => availableIds.has(id)));
+      }
     } finally {
       setIsLocking(false);
     }
