@@ -76,27 +76,25 @@ export const LoginPage = () => {
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md px-4">
         <div className="bg-white py-8 px-6 sm:px-10 rounded-card-lg border border-brand-border shadow-card space-y-6">
-          {/* Demo Mode Notice */}
-          {isDemoMode && (
-            <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-xl space-y-1.5">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold text-amber-900 uppercase tracking-wider flex items-center gap-1">
-                  <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-                  DEMO MODE AUTHENTICATION
-                </span>
-                <button
-                  type="button"
-                  onClick={handleQuickDemoFill}
-                  className="text-[10px] font-black text-brand-red bg-white px-2 py-0.5 rounded border border-red-200 hover:bg-red-50 transition-colors"
-                >
-                  Auto-Fill Demo
-                </button>
-              </div>
-              <p className="text-[11px] text-amber-800">
-                Running on local persistent database. Use <strong className="font-mono text-brand-navy">customer@busgo.in</strong> / <strong className="font-mono text-brand-navy">Pass@123</strong>.
-              </p>
+          {/* Quick Test / Demo Credentials */}
+          <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-xl space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold text-amber-900 uppercase tracking-wider flex items-center gap-1">
+                <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                QUICK TEST CREDENTIALS
+              </span>
+              <button
+                type="button"
+                onClick={handleQuickDemoFill}
+                className="text-[10px] font-black text-brand-red bg-white px-2 py-0.5 rounded border border-red-200 hover:bg-red-50 transition-colors shadow-xs"
+              >
+                Auto-Fill Demo
+              </button>
             </div>
-          )}
+            <p className="text-[11px] text-amber-800">
+              Instant test login: <strong className="font-mono text-brand-navy">customer@busgo.in</strong> / <strong className="font-mono text-brand-navy">Pass@123</strong>
+            </p>
+          </div>
 
           {error && (
             <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-lg flex items-start gap-2 animate-in fade-in">

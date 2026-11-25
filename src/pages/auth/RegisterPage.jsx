@@ -34,6 +34,7 @@ export const RegisterPage = () => {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [verificationSent, setVerificationSent] = useState(false);
   const [policyModal, setPolicyModal] = useState(null);
 
   const handleRegister = async (e) => {
@@ -67,14 +68,19 @@ export const RegisterPage = () => {
 
     setLoading(true);
     try {
-      await registerCustomer({
+      const res = await registerCustomer({
         email,
         password,
         fullName,
         phone,
         city,
       });
-      navigate('/profile', { replace: true });
+
+      if (res?.requiresVerification) {
+        setVerificationSent(true);
+      } else {
+        navigate('/profile', { replace: true });
+      }
     } catch (err) {
       setError(err.message || 'Registration failed');
     } finally {
@@ -96,14 +102,41 @@ export const RegisterPage = () => {
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md px-4">
         <div className="bg-white py-8 px-6 sm:px-10 rounded-card-lg border border-brand-border shadow-card space-y-6">
-          {error && (
-            <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-lg flex items-start gap-2 animate-in fade-in">
-              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-              <span>{error}</span>
+          {verificationSent ? (
+            <div className="text-center space-y-4 py-4 animate-in zoom-in-95">
+              <div className="w-16 h-16 rounded-full bg-emerald-50 text-brand-success flex items-center justify-center mx-auto border border-emerald-200">
+                <CheckCircle2 className="w-8 h-8" />
+              </div>
+              <h3 className="text-xl font-bold text-brand-navy">
+                Account Created Successfully!
+              </h3>
+              <p className="text-xs sm:text-sm text-brand-muted leading-relaxed">
+                We've registered your account for <strong className="text-brand-navy">{email}</strong>.
+                If email confirmation is active on your cloud project, please click the confirmation link in your email. Otherwise, you can sign in directly!
+              </p>
+              <div className="pt-2">
+                <Button
+                  variant="primary"
+                  size="md"
+                  className="w-full font-bold"
+                  onClick={() => navigate('/login')}
+                  icon={ArrowRight}
+                  iconPosition="right"
+                >
+                  Proceed to Sign In
+                </Button>
+              </div>
             </div>
-          )}
+          ) : (
+            <>
+              {error && (
+                <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-lg flex items-start gap-2 animate-in fade-in">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{error}</span>
+                </div>
+              )}
 
-          <form onSubmit={handleRegister} className="space-y-4">
+              <form onSubmit={handleRegister} className="space-y-4">
             <Input
               label="Full Name"
               placeholder="e.g. Madhav Sharma"
@@ -205,14 +238,16 @@ export const RegisterPage = () => {
             </Button>
           </form>
 
-          <div className="pt-2 border-t border-gray-100 text-center">
-            <p className="text-xs text-brand-muted">
-              Already have an account?{' '}
-              <Link to="/login" className="font-bold text-brand-red hover:underline">
-                Sign In
-              </Link>
-            </p>
-          </div>
+              <div className="pt-2 border-t border-gray-100 text-center">
+                <p className="text-xs text-brand-muted">
+                  Already have an account?{' '}
+                  <Link to="/login" className="font-bold text-brand-red hover:underline">
+                    Sign In
+                  </Link>
+                </p>
+              </div>
+            </>
+          )}
         </div>
       </div>
 

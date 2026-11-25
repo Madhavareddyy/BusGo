@@ -81,15 +81,13 @@ export const AdminLoginPage = () => {
                 <Server className="w-3.5 h-3.5" />
                 SECURITY AUDIT ENFORCED
               </span>
-              {isDemoMode && (
-                <button
-                  type="button"
-                  onClick={handleQuickDemoFill}
-                  className="text-[10px] font-black text-amber-300 bg-white/10 px-2 py-0.5 rounded border border-white/20 hover:bg-white/20 transition-colors"
-                >
-                  Auto-Fill Admin
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={handleQuickDemoFill}
+                className="text-[10px] font-black text-amber-300 bg-white/10 px-2 py-0.5 rounded border border-white/20 hover:bg-white/20 transition-colors shadow-xs"
+              >
+                Auto-Fill Admin
+              </button>
             </div>
             <p className="text-[11px] text-gray-400 leading-relaxed">
               Admin credentials cannot be registered publicly. See <code className="text-rose-400 font-mono">SETUP_ADMIN.md</code> for elevation instructions.

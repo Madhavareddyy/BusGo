@@ -84,31 +84,29 @@ export const OperatorLoginPage = () => {
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md px-4">
         <div className="bg-white text-brand-text py-8 px-6 sm:px-10 rounded-card-lg border border-brand-border shadow-2xl space-y-6">
-          {/* Demo Pills */}
-          {isDemoMode && (
-            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-2">
-              <span className="text-[10px] font-bold text-amber-900 uppercase tracking-wider flex items-center gap-1">
-                <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-                DEMO OPERATOR ACCOUNTS
-              </span>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={handleDemoActive}
-                  className="flex-1 py-1.5 px-2 bg-emerald-100 hover:bg-emerald-200 text-emerald-900 text-[10px] font-bold rounded text-center transition-colors"
-                >
-                  Approved: Sunrise Travels
-                </button>
-                <button
-                  type="button"
-                  onClick={handleDemoPending}
-                  className="flex-1 py-1.5 px-2 bg-amber-100 hover:bg-amber-200 text-amber-900 text-[10px] font-bold rounded text-center transition-colors"
-                >
-                  Pending: CityLink
-                </button>
-              </div>
+          {/* Operator Demo Test Accounts */}
+          <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-2">
+            <span className="text-[10px] font-bold text-amber-900 uppercase tracking-wider flex items-center gap-1">
+              <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+              QUICK TEST OPERATOR ACCOUNTS
+            </span>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={handleDemoActive}
+                className="flex-1 py-1.5 px-2 bg-emerald-100 hover:bg-emerald-200 text-emerald-900 text-[10px] font-bold rounded text-center transition-colors shadow-xs"
+              >
+                Approved: Sunrise
+              </button>
+              <button
+                type="button"
+                onClick={handleDemoPending}
+                className="flex-1 py-1.5 px-2 bg-amber-100 hover:bg-amber-200 text-amber-900 text-[10px] font-bold rounded text-center transition-colors shadow-xs"
+              >
+                Pending: CityLink
+              </button>
             </div>
-          )}
+          </div>
 
           {error && (
             <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-lg flex items-start gap-2 animate-in fade-in">

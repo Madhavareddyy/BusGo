@@ -75,22 +75,50 @@ export const AuthProvider = ({ children }) => {
     }
   }, [demoUsers]);
 
-  // Fetch Supabase Profile
-  const fetchSupabaseProfile = async (userId) => {
+  // Fetch Supabase Profile with resilient fallback
+  const fetchSupabaseProfile = async (userId, userMetadata = null, email = '') => {
     try {
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
-        .single();
+        .maybeSingle();
 
-      if (error) {
-        console.error('Error fetching Supabase user profile:', error);
-        return null;
+      if (!error && data) {
+        return data;
       }
-      return data;
+
+      // If profile row is not found or error occurred, attempt to construct fallback profile
+      if (userMetadata || email) {
+        const meta = userMetadata || {};
+        const fallback = {
+          id: userId,
+          email: email || '',
+          full_name: meta.full_name || (email ? email.split('@')[0] : 'User'),
+          phone: meta.phone || null,
+          role: meta.role || 'customer',
+          status: meta.role === 'operator' ? 'pending_approval' : 'active',
+          company_name: meta.company_name || null,
+          fleet_size: meta.fleet_size ? parseInt(meta.fleet_size, 10) : null,
+          registration_number: meta.registration_number || null,
+          city: meta.city || null,
+        };
+
+        try {
+          const { data: upserted } = await supabase
+            .from('profiles')
+            .upsert(fallback, { onConflict: 'id' })
+            .select()
+            .maybeSingle();
+          if (upserted) return upserted;
+        } catch {
+          // ignore upsert error and return fallback object
+        }
+        return fallback;
+      }
+      return null;
     } catch (err) {
-      console.error('Unexpected profile fetch error:', err);
+      console.warn('Unexpected profile fetch error:', err);
       return null;
     }
   };
@@ -102,25 +130,29 @@ export const AuthProvider = ({ children }) => {
     const initializeAuth = async () => {
       setIsLoading(true);
 
+      let authenticated = false;
+
       if (isSupabaseConfigured && supabase) {
         // Real Supabase Auth Flow
         try {
           const { data: { session } } = await supabase.auth.getSession();
           if (session?.user && mounted) {
             setUser(session.user);
-            const userProfile = await fetchSupabaseProfile(session.user.id);
+            const userProfile = await fetchSupabaseProfile(session.user.id, session.user.user_metadata, session.user.email);
             if (mounted) setProfile(userProfile);
+            authenticated = true;
           }
         } catch (err) {
           console.error('Supabase session initialization failed:', err);
         }
-      } else {
-        // In-Browser Demo Auth Flow (localStorage)
+      }
+
+      // If no live Supabase session, check stored demo session
+      if (!authenticated) {
         try {
           const storedSession = localStorage.getItem('busgo_demo_session');
           if (storedSession && mounted) {
             const parsedSession = JSON.parse(storedSession);
-            // Verify user still exists in demo store
             const found = demoUsers.find((u) => u.id === parsedSession.id);
             if (found) {
               setUser({ id: found.id, email: found.email });
@@ -146,11 +178,15 @@ export const AuthProvider = ({ children }) => {
         if (!mounted) return;
         if (session?.user) {
           setUser(session.user);
-          const userProfile = await fetchSupabaseProfile(session.user.id);
+          const userProfile = await fetchSupabaseProfile(session.user.id, session.user.user_metadata, session.user.email);
           setProfile(userProfile);
         } else {
-          setUser(null);
-          setProfile(null);
+          // Check if demo session exists before wiping
+          const storedSession = localStorage.getItem('busgo_demo_session');
+          if (!storedSession) {
+            setUser(null);
+            setProfile(null);
+          }
         }
         setIsLoading(false);
       });
@@ -167,21 +203,61 @@ export const AuthProvider = ({ children }) => {
   const login = async (email, password, expectedRole = null) => {
     const cleanEmail = email.trim().toLowerCase();
 
+    // 1. Check if user is logging in with a known Demo account
+    const matchedDemoUser = demoUsers.find(
+      (u) => u.email.toLowerCase() === cleanEmail && u.password === password
+    );
+
+    if (matchedDemoUser) {
+      if (matchedDemoUser.status === 'suspended') {
+        throw new Error('Account suspended by administrator.');
+      }
+      if (expectedRole && matchedDemoUser.role !== expectedRole) {
+        throw new Error(
+          `Access Denied: This portal requires ${expectedRole.toUpperCase()} credentials. Your account role is ${matchedDemoUser.role.toUpperCase()}.`
+        );
+      }
+
+      const sessionObj = {
+        id: matchedDemoUser.id,
+        email: matchedDemoUser.email,
+        role: matchedDemoUser.role,
+        full_name: matchedDemoUser.full_name,
+      };
+      localStorage.setItem('busgo_demo_session', JSON.stringify(sessionObj));
+      setUser({ id: matchedDemoUser.id, email: matchedDemoUser.email });
+      setProfile(matchedDemoUser);
+      return { user: { id: matchedDemoUser.id, email: matchedDemoUser.email }, profile: matchedDemoUser };
+    }
+
+    // 2. Production Supabase Auth Flow
     if (isSupabaseConfigured && supabase) {
-      // 1. Production Supabase Auth
       const { data, error } = await supabase.auth.signInWithPassword({
         email: cleanEmail,
         password,
       });
 
       if (error) {
+        if (error.message?.toLowerCase().includes('email not confirmed')) {
+          throw new Error('Email address not confirmed. Please check your inbox for the confirmation email from Supabase, or contact support.');
+        }
         throw new Error(error.message || 'Invalid email or password.');
       }
 
-      // Fetch user profile and verify role
-      const userProfile = await fetchSupabaseProfile(data.user.id);
+      // Fetch or self-heal user profile
+      let userProfile = await fetchSupabaseProfile(data.user.id, data.user.user_metadata, cleanEmail);
       if (!userProfile) {
-        throw new Error('User profile record not found. Please contact support.');
+        const meta = data.user.user_metadata || {};
+        userProfile = {
+          id: data.user.id,
+          email: cleanEmail,
+          full_name: meta.full_name || cleanEmail.split('@')[0],
+          phone: meta.phone || '',
+          role: meta.role || 'customer',
+          status: meta.role === 'operator' ? 'pending_approval' : 'active',
+          city: meta.city || '',
+          company_name: meta.company_name || null,
+        };
       }
 
       // Check if suspended
@@ -198,42 +274,13 @@ export const AuthProvider = ({ children }) => {
         );
       }
 
+      localStorage.removeItem('busgo_demo_session');
       setUser(data.user);
       setProfile(userProfile);
       return { user: data.user, profile: userProfile };
-    } else {
-      // 2. Demo Mode Simulation
-      const matchedUser = demoUsers.find(
-        (u) => u.email.toLowerCase() === cleanEmail && u.password === password
-      );
-
-      if (!matchedUser) {
-        throw new Error('Invalid email or password. (Check demo credentials in table below)');
-      }
-
-      if (matchedUser.status === 'suspended') {
-        throw new Error('Account suspended by administrator.');
-      }
-
-      // Check role enforcement for specific login portals
-      if (expectedRole && matchedUser.role !== expectedRole) {
-        throw new Error(
-          `Access Denied: This portal requires ${expectedRole.toUpperCase()} credentials. Your account role is ${matchedUser.role.toUpperCase()}.`
-        );
-      }
-
-      const sessionObj = {
-        id: matchedUser.id,
-        email: matchedUser.email,
-        role: matchedUser.role,
-        full_name: matchedUser.full_name,
-      };
-      localStorage.setItem('busgo_demo_session', JSON.stringify(sessionObj));
-
-      setUser({ id: matchedUser.id, email: matchedUser.email });
-      setProfile(matchedUser);
-      return { user: { id: matchedUser.id, email: matchedUser.email }, profile: matchedUser };
     }
+
+    throw new Error('Invalid email or password. Please check your credentials or register a new account.');
   };
 
   // REGISTER CUSTOMER
@@ -259,7 +306,18 @@ export const AuthProvider = ({ children }) => {
         throw new Error(error.message);
       }
 
-      return { user: data.user, requiresVerification: !data.session };
+      const hasSession = Boolean(data?.session);
+      if (hasSession && data.user) {
+        setUser(data.user);
+        const userProfile = await fetchSupabaseProfile(data.user.id, data.user.user_metadata, cleanEmail);
+        setProfile(userProfile);
+      }
+
+      return { 
+        user: data.user, 
+        session: data.session, 
+        requiresVerification: !hasSession 
+      };
     } else {
       // Demo Mode Registration
       const exists = demoUsers.some((u) => u.email.toLowerCase() === cleanEmail);
@@ -282,7 +340,7 @@ export const AuthProvider = ({ children }) => {
       localStorage.setItem('busgo_demo_session', JSON.stringify(newCustomer));
       setUser({ id: newCustomer.id, email: newCustomer.email });
       setProfile(newCustomer);
-      return { user: newCustomer, profile: newCustomer };
+      return { user: newCustomer, profile: newCustomer, requiresVerification: false };
     }
   };
 
@@ -380,9 +438,8 @@ export const AuthProvider = ({ children }) => {
   const logout = async () => {
     if (isSupabaseConfigured && supabase) {
       await supabase.auth.signOut();
-    } else {
-      localStorage.removeItem('busgo_demo_session');
     }
+    localStorage.removeItem('busgo_demo_session');
     setUser(null);
     setProfile(null);
   };
