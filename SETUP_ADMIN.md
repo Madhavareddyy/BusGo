@@ -9,6 +9,10 @@ In accordance with production security standards, the **Admin** role can **never
 
 ---
 
+
+
+
+
 ### Procedure to Create the Initial Admin
 
 #### Method A: Direct SQL in Supabase SQL Editor (Recommended)
