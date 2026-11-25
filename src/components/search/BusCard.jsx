@@ -118,13 +118,13 @@ export const BusCard = ({ bus }) => {
           // Verify if any seat selected in local state was claimed by another system
           setSelectedSeatIds((prev) => {
             const conflicting = liveSeats.filter(
-              (s) => prev.includes(s.id) && s.status !== 'available'
+              (s) => prev.includes(s.id) && s.status !== 'available' && s.locked_by_session_id !== sessionId
             );
             if (conflicting.length > 0) {
               const names = conflicting.map((s) => s.seat_number).join(', ');
               setLockError(`Seat ${names} was just claimed by another passenger on another device.`);
               const availableIds = new Set(
-                liveSeats.filter((s) => s.status === 'available').map((s) => s.id)
+                liveSeats.filter((s) => s.status === 'available' || s.locked_by_session_id === sessionId).map((s) => s.id)
               );
               return prev.filter((id) => availableIds.has(id));
             }
@@ -137,7 +137,7 @@ export const BusCard = ({ bus }) => {
     }, 5000);
 
     return () => clearInterval(syncInterval);
-  }, [isExpanded, bookingStep, bus.id]);
+  }, [isExpanded, bookingStep, bus.id, sessionId]);
 
   // Step 1 -> Step 2: Atomic Seat Locking
   const handleProceedToPassengers = async () => {
@@ -161,7 +161,7 @@ export const BusCard = ({ bus }) => {
       setSeats(refreshed || []);
       if (refreshed) {
         const availableIds = new Set(
-          refreshed.filter((s) => s.status === 'available').map((s) => s.id)
+          refreshed.filter((s) => s.status === 'available' || s.locked_by_session_id === sessionId).map((s) => s.id)
         );
         setSelectedSeatIds((prev) => prev.filter((id) => availableIds.has(id)));
       }
@@ -180,14 +180,16 @@ export const BusCard = ({ bus }) => {
   const handlePaymentSuccess = async (paymentDetails) => {
     setIsConfirmingBooking(true);
     try {
-      const selectedSeatsObjects = seats.filter((s) => selectedSeatIds.includes(s.id));
-      const formattedPassengers = (passengerPayload.passengers || []).map((p, idx) => ({
-        seat_id: p.seat_id || selectedSeatIds[idx],
-        seat_number: p.seat_number,
-        full_name: p.full_name,
-        age: parseInt(p.age, 10) || 28,
-        gender: (p.gender || 'male').toLowerCase(),
-      }));
+      const formattedPassengers = (passengerPayload.passengers || []).map((p, idx) => {
+        const matchingSeat = seats.find((s) => s.id === (p.seat_id || selectedSeatIds[idx]));
+        return {
+          seat_id: p.seat_id || selectedSeatIds[idx] || (matchingSeat ? matchingSeat.id : selectedSeatIds[0]),
+          seat_number: p.seat_number || (matchingSeat ? matchingSeat.seat_number : `S${idx + 1}`),
+          full_name: p.full_name || 'Passenger ' + (idx + 1),
+          age: parseInt(p.age, 10) || 28,
+          gender: (p.gender || 'male').toLowerCase(),
+        };
+      });
 
       const bStop = boardingStops.find((s) => s.id === selectedBoardingStop || s.name === selectedBoardingStop) || boardingStops[0];
       const dStop = droppingStops.find((s) => s.id === selectedDroppingStop || s.name === selectedDroppingStop) || droppingStops[0];
