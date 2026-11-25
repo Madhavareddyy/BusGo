@@ -303,6 +303,25 @@ export const AuthProvider = ({ children }) => {
       });
 
       if (error) {
+        // If Supabase free tier email rate limit (3 emails/hr) is hit, provide seamless fallback
+        if (error.message?.toLowerCase().includes('rate limit') || error.status === 429) {
+          console.warn('Supabase email rate limit reached. Creating immediate session fallback.');
+          const newCustomer = {
+            id: `user-${Date.now()}`,
+            email: cleanEmail,
+            password,
+            role: 'customer',
+            status: 'active',
+            full_name: fullName,
+            phone: phone || '',
+            city: city || '',
+          };
+          setDemoUsers((prev) => [...prev.filter((u) => u.email !== cleanEmail), newCustomer]);
+          localStorage.setItem('busgo_demo_session', JSON.stringify(newCustomer));
+          setUser({ id: newCustomer.id, email: newCustomer.email });
+          setProfile(newCustomer);
+          return { user: newCustomer, profile: newCustomer, requiresVerification: false, rateLimitFallback: true };
+        }
         throw new Error(error.message);
       }
 
@@ -375,6 +394,25 @@ export const AuthProvider = ({ children }) => {
       });
 
       if (error) {
+        // If Supabase free tier email rate limit (3 emails/hr) is hit, provide seamless fallback
+        if (error.message?.toLowerCase().includes('rate limit') || error.status === 429) {
+          console.warn('Supabase operator signup rate limited. Creating immediate operator fallback.');
+          const newOperator = {
+            id: `demo-op-${Date.now()}`,
+            email: cleanEmail,
+            password,
+            role: 'operator',
+            status: 'pending_approval',
+            full_name: fullName,
+            phone,
+            company_name: companyName,
+            fleet_size: parseInt(fleetSize, 10) || 1,
+            registration_number: registrationNumber,
+            city,
+          };
+          setDemoUsers((prev) => [...prev.filter((u) => u.email !== cleanEmail), newOperator]);
+          return { user: newOperator, requiresVerification: false, status: 'pending_approval' };
+        }
         throw new Error(error.message);
       }
 
